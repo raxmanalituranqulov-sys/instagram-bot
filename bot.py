@@ -20,6 +20,7 @@ import yt_dlp
 
 import urllib.parse
 import aiohttp
+from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.enums import ChatAction, ParseMode
@@ -673,6 +674,27 @@ async def handle_circle_to_video(message: types.Message, bot: Bot):
                     await asyncio.sleep(0.5)
 
 
+async def start_health_check_server():
+    """
+    Render.com Web Service'da 'Port binding timed out' bo'lmasligi va
+    servis holati darhol 'Live' bo'lishi uchun yengil HTTP server.
+    """
+    port = int(os.getenv("PORT", 10000))
+
+    async def handle_ping(request):
+        return web.Response(text="Bot is running!")
+
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/health", handle_ping)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Render port={port} da HTTP health check server ishga tushdi.")
+
+
 async def main():
     if not BOT_TOKEN or BOT_TOKEN == "1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ":
         print("\n" + "=" * 60)
@@ -681,6 +703,10 @@ async def main():
         print("haqiqiy tokenni BOT_TOKEN o'zgaruvchisiga kiriting.")
         print("=" * 60 + "\n")
         return
+
+    # Render.com Web Service uchun HTTP portni ochish
+    if os.getenv("PORT"):
+        await start_health_check_server()
 
     # Katta video fayllarni yuklashda timeout xatosini oldini olish (300 soniya / 5 daqiqa)
     session = AiohttpSession(timeout=300)
