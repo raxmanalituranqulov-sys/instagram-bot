@@ -7,13 +7,13 @@ import asyncio
 import subprocess
 from pathlib import Path
 
-# Windows konsolida UTF-8 emoji xatoliklarini oldini olish
-if sys.platform == "win32":
-    try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-    except Exception:
-        pass
+# Konsol va loglarda chiqishlarni zudlik bilan ko'rsatish (buffer to'lib qolmasligi uchun)
+try:
+    sys.stdout.reconfigure(line_buffering=True, encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(line_buffering=True, encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 
 from dotenv import load_dotenv
 import yt_dlp
@@ -682,7 +682,7 @@ async def start_health_check_server():
     port = int(os.getenv("PORT", 10000))
 
     async def handle_ping(request):
-        return web.Response(text="Bot is running!")
+        return web.Response(text="Bot is running! OK 200")
 
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -692,21 +692,24 @@ async def start_health_check_server():
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
+    print(f"🌐 HTTP health check server 0.0.0.0:{port} da muvaffaqiyatli ishga tushdi.", flush=True)
     logger.info(f"Render port={port} da HTTP health check server ishga tushdi.")
 
 
 async def main():
     if not BOT_TOKEN or BOT_TOKEN == "1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ":
-        print("\n" + "=" * 60)
-        print("XATOLIK: BOT_TOKEN topilmadi yoki o'rnatilmadi!")
-        print("Iltimos, .env faylini oching va @BotFather dan olingan")
-        print("haqiqiy tokenni BOT_TOKEN o'zgaruvchisiga kiriting.")
-        print("=" * 60 + "\n")
+        print("\n" + "=" * 60, flush=True)
+        print("XATOLIK: BOT_TOKEN topilmadi yoki o'rnatilmadi!", flush=True)
+        print("Iltimos, .env faylini oching va @BotFather dan olingan", flush=True)
+        print("haqiqiy tokenni BOT_TOKEN o'zgaruvchisiga kiriting.", flush=True)
+        print("=" * 60 + "\n", flush=True)
         return
 
-    # Render.com Web Service uchun HTTP portni ochish
-    if os.getenv("PORT"):
+    # Render.com Web Service uchun HTTP portni ochish (har doim ishga tushiramiz)
+    try:
         await start_health_check_server()
+    except Exception as e:
+        logger.warning(f"Health check server ishga tushirishda ogohlantirish: {e}")
 
     # Katta video fayllarni yuklashda timeout xatosini oldini olish (300 soniya / 5 daqiqa)
     session = AiohttpSession(timeout=300)
@@ -716,7 +719,8 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
-    print("🤖 Instagram, YouTube, Video Converter & AI Chat bot ishga tushdi...")
+    print("🤖 Instagram, YouTube, Video Converter & AI Chat bot ishga tushdi...", flush=True)
+
     # Eskirgan buyruqlarni tashlab yuborish
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
