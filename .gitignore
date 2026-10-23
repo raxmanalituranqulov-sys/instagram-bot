@@ -1,0 +1,21 @@
+# Maxfiy tokenlar va kalitlar
+.env
+
+# Vaqtinchalik yuklab olingan videolar
+downloads/
+
+# Python va virtual muhit
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
+# Instagram cookies
+cookies.txt
+
+# Tizim va IDE fayllari
+.idea/
+.vscode/
+*.log
