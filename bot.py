@@ -696,6 +696,39 @@ async def start_health_check_server():
     logger.info(f"Render port={port} da HTTP health check server ishga tushdi.")
 
 
+async def render_keep_alive_task():
+    """
+    Render.com Free Web Service 15 daqiqa davomida so'rov kelmasa uxlab qolmasligi (spin down bo'lmasligi)
+    uchun har 9 daqiqada o'zining public manziliga HTTP GET so'rovi yuborib turadi.
+    Bu bot 24/7 kompyuter o'chiq bo'lganda ham uzluksiz ishlashini ta'minlaydi.
+    """
+    target_url = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("KEEP_ALIVE_URL")
+    if not target_url:
+        logger.info("ℹ️ RENDER_EXTERNAL_URL topilmadi (mahalliy rejimda keep-alive ping talab etilmaydi).")
+        return
+
+    target_url = target_url.rstrip("/")
+    health_url = f"{target_url}/health"
+    logger.info(f"🔄 Render 24/7 Keep-alive ping tizimi ishga tushirildi: {health_url}")
+
+    # Server to'liq ko'tarilishi uchun 60 soniya kutish
+    await asyncio.sleep(60)
+
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(health_url, timeout=15) as resp:
+                    if resp.status == 200:
+                        logger.info(f"✅ Render Keep-alive muvaffaqiyatli: {resp.status} OK")
+                    else:
+                        logger.warning(f"⚠️ Render Keep-alive kutilmagan javob qaytardi: {resp.status}")
+        except Exception as e:
+            logger.warning(f"⚠️ Render Keep-alive ping xatosi: {e}")
+
+        # Render 15 daqiqada uxlatadi, shuning uchun har 9 daqiqada (540 soniya) ping jo'natiladi
+        await asyncio.sleep(540)
+
+
 async def main():
     if not BOT_TOKEN or BOT_TOKEN == "1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ":
         print("\n" + "=" * 60, flush=True)
@@ -710,6 +743,9 @@ async def main():
         await start_health_check_server()
     except Exception as e:
         logger.warning(f"Health check server ishga tushirishda ogohlantirish: {e}")
+
+    # Render 15 daqiqada uxlab qolmasligi uchun 24/7 Keep-alive vazifasini ishga tushirish
+    asyncio.create_task(render_keep_alive_task())
 
     # Katta video fayllarni yuklashda timeout xatosini oldini olish (300 soniya / 5 daqiqa)
     session = AiohttpSession(timeout=300)
