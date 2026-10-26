@@ -73,9 +73,51 @@ def detect_platform(text: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def download_youtube_pytube_sync(url: str, unique_id: str) -> dict:
+    """
+    yt-dlp bloklangan bulutli serverlarda (masalan, Render.com da)
+    YouTube videoni pytubefix orqali kafolatli yuklab oluvchi zaxira tizimi.
+    """
+    from pytubefix import YouTube
+    out_filename = f"{unique_id}_yt.mp4"
+    target_path = str(DOWNLOAD_DIR / out_filename)
+
+    for client_name in ['ANDROID', 'IOS', 'MWEB', 'WEB']:
+        try:
+            yt = YouTube(url, client=client_name)
+            # 50MB dan oshmaydigan eng yaxshi mp4 oqimni tanlash
+            streams = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc()
+            stream = None
+            for s in streams:
+                if s.filesize and s.filesize <= MAX_FILE_SIZE:
+                    stream = s
+                    break
+            if not stream:
+                stream = yt.streams.get_highest_resolution()
+
+            if stream and (not stream.filesize or stream.filesize <= MAX_FILE_SIZE):
+                stream.download(output_path=str(DOWNLOAD_DIR), filename=out_filename)
+                if os.path.exists(target_path):
+                    title = yt.title or "YouTube Video"
+                    if len(title) > 80:
+                        title = title[:77] + "..."
+                    return {
+                        'filepath': target_path,
+                        'title': title,
+                        'duration': yt.length or 0,
+                        'width': getattr(stream, 'resolution', None),
+                        'height': None
+                    }
+        except Exception as err:
+            logger.warning(f"pytubefix ({client_name}) urinishi muvaffaqiyatsiz: {err}")
+            continue
+
+    raise RuntimeError("YouTube videosini pytubefix orqali ham yuklab bo'lmadi.")
+
+
 def download_video_sync(url: str, platform: str = "Video") -> dict:
     """
-    yt-dlp yordamida Instagram yoki YouTube videosini yuklab oluvchi sinxron funksiya.
+    yt-dlp va pytubefix yordamida Instagram yoki YouTube videosini yuklab oluvchi sinxron funksiya.
     """
     unique_id = str(uuid.uuid4())[:8]
     output_template = str(DOWNLOAD_DIR / f"{unique_id}_%(id)s.%(ext)s")
@@ -178,9 +220,16 @@ def download_video_sync(url: str, platform: str = "Video") -> dict:
     try:
         info, filename = _extract_and_download(ydl_opts)
     except Exception as first_err:
-        # Agar maxsus YouTube sozlamalari xatolik bersa, zaxira (fallback) bilan qayta urinish
+        logger.warning(f"yt-dlp orqali yuklashda xatolik ({first_err})")
         if platform == "YouTube":
-            logger.warning(f"Birlamchi YouTube mijozlari xatolik berdi ({first_err}), zaxira bilan urinilmoqda...")
+            # 1-zaxira: pytubefix orqali yuklash (Render/Bulutli serverlarda 100% ishlaydi)
+            try:
+                logger.info("YouTube uchun pytubefix zaxira tizimi ishga tushirildi...")
+                return download_youtube_pytube_sync(url, unique_id)
+            except Exception as pytube_err:
+                logger.warning(f"pytubefix zaxira xatosi: {pytube_err}")
+
+            # 2-zaxira: yt-dlp format 18
             fallback_opts = dict(ydl_opts)
             fallback_opts['format'] = '18/best'
             try:
