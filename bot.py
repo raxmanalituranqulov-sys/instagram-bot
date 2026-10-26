@@ -95,6 +95,22 @@ def download_video_sync(url: str, platform: str = "Video") -> dict:
             logger.info("YOUTUBE_COOKIES o'zgaruvchisidan cookies.txt fayli yaratildi.")
         except Exception as e:
             logger.warning(f"cookies.txt yaratishda xatolik: {e}")
+    elif not cookie_file.exists():
+        # Serverda qo'shimcha sozlarsiz avtomatik ishlashi uchun tayyor cookies
+        try:
+            default_cookies = (
+                "# Netscape HTTP Cookie File\n"
+                ".youtube.com\tTRUE\t/\tTRUE\t1808543082\tVISITOR_INFO1_LIVE\t_LZuymERYH8\n"
+                ".youtube.com\tTRUE\t/\tTRUE\t1808543082\tVISITOR_PRIVACY_METADATA\tCgJVWhIEGgAgVw%3D%3D\n"
+                ".youtube.com\tTRUE\t/\tTRUE\t0\tYSC\tN9S3ehat9l4\n"
+                ".youtube.com\tTRUE\t/\tTRUE\t1808542855\t__Secure-ROLLOUT_TOKEN\tCNniw7D6kuqJQhDfvOupqKSSAxjPlKe489aXAw%3D%3D\n"
+                ".youtube.com\tTRUE\t/\tFALSE\t0\tPREF\thl=en&tz=UTC\n"
+                ".youtube.com\tTRUE\t/\tTRUE\t0\tSOCS\tCAI\n"
+                ".youtube.com\tTRUE\t/\tTRUE\t1792992655\tGPS\t1\n"
+            )
+            cookie_file.write_text(default_cookies, encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Zaxira cookies yaratishda xatolik: {e}")
 
     # YouTube uchun 50MB limitga mos keladigan formatni tanlash
     if platform == "YouTube":

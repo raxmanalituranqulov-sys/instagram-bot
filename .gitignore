@@ -12,8 +12,7 @@ venv/
 env/
 .venv/
 
-# Instagram cookies
-cookies.txt
+
 
 # Tizim va IDE fayllari
 .idea/
