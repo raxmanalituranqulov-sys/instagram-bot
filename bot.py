@@ -176,8 +176,7 @@ def download_video_sync(url: str, platform: str = "Video") -> dict:
             'source_address': '0.0.0.0',
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'tv_downgraded', 'mweb'],
-                    'player_skip': ['web', 'configs'],
+                    'player_client': ['android', 'ios', 'tv_downgraded', 'mweb', 'web'],
                 }
             }
         }
@@ -871,11 +870,33 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
+    is_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+    has_render_cookies = bool(os.getenv("YOUTUBE_COOKIES"))
+
+    if is_render and not has_render_cookies:
+        logger.info(
+            "ℹ️ Render.com muhiti aniqlandi. YouTube IP cheklovlari mavjudligi va YOUTUBE_COOKIES "
+            "berilmagani sababli Render'da Telegram polling to'xtatildi. Bot mahalliy kompyuteringiz orqali cheklovlarsiz ishlaydi."
+        )
+        print("🌐 Render HTTP Health Check rejimida faol. Polling mahalliy kompyuteringizda ishlaydi.", flush=True)
+        while True:
+            await asyncio.sleep(3600)
+
     print("🤖 Instagram, YouTube, Video Converter & AI Chat bot ishga tushdi...", flush=True)
 
-    # Eskirgan buyruqlarni tashlab yuborish
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    # Eskirgan buyruqlarni tozalash va pollingni xavfsiz boshlash
+    while True:
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            await dp.start_polling(bot)
+            break
+        except Exception as poll_err:
+            if "conflict" in str(poll_err).lower():
+                logger.warning("⚠️ Boshqa bot seansi faol (TelegramConflictError). 5 soniyadan so'ng qayta ulanadi...")
+                await asyncio.sleep(5)
+            else:
+                logger.error(f"Polling xatosi: {poll_err}")
+                raise poll_err
 
 
 if __name__ == "__main__":
