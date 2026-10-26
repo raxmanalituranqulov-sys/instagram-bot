@@ -115,6 +115,7 @@ def download_video_sync(url: str, platform: str = "Video") -> dict:
             'noplaylist': True,
             'merge_output_format': 'mp4',
             'max_filesize': MAX_FILE_SIZE,
+            'source_address': '0.0.0.0',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android', 'ios', 'tv_downgraded', 'mweb'],
@@ -132,6 +133,7 @@ def download_video_sync(url: str, platform: str = "Video") -> dict:
             'noplaylist': True,
             'merge_output_format': 'mp4',
             'max_filesize': MAX_FILE_SIZE,
+            'source_address': '0.0.0.0',
             'http_headers': {
                 'User-Agent': (
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -161,11 +163,16 @@ def download_video_sync(url: str, platform: str = "Video") -> dict:
         info, filename = _extract_and_download(ydl_opts)
     except Exception as first_err:
         # Agar maxsus YouTube sozlamalari xatolik bersa, zaxira (fallback) bilan qayta urinish
-        if platform == "YouTube" and 'extractor_args' in ydl_opts:
+        if platform == "YouTube":
             logger.warning(f"Birlamchi YouTube mijozlari xatolik berdi ({first_err}), zaxira bilan urinilmoqda...")
             fallback_opts = dict(ydl_opts)
-            fallback_opts.pop('extractor_args', None)
-            info, filename = _extract_and_download(fallback_opts)
+            fallback_opts['format'] = '18/best'
+            try:
+                info, filename = _extract_and_download(fallback_opts)
+            except Exception:
+                fallback_opts2 = dict(ydl_opts)
+                fallback_opts2.pop('extractor_args', None)
+                info, filename = _extract_and_download(fallback_opts2)
         else:
             raise first_err
 
