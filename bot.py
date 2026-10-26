@@ -86,80 +86,115 @@ def download_video_sync(url: str, platform: str = "Video") -> dict:
     except Exception:
         ffmpeg_exe = None
 
+    cookie_file = Path("cookies.txt")
+    # Agar Render yoki serverda YOUTUBE_COOKIES muhit o'zgaruvchisi berilgan bo'lsa
+    youtube_cookies_env = os.getenv("YOUTUBE_COOKIES")
+    if youtube_cookies_env and not cookie_file.exists():
+        try:
+            cookie_file.write_text(youtube_cookies_env.strip(), encoding="utf-8")
+            logger.info("YOUTUBE_COOKIES o'zgaruvchisidan cookies.txt fayli yaratildi.")
+        except Exception as e:
+            logger.warning(f"cookies.txt yaratishda xatolik: {e}")
+
     # YouTube uchun 50MB limitga mos keladigan formatni tanlash
     if platform == "YouTube":
         video_format = (
             'bestvideo[filesize<?45M][ext=mp4]+bestaudio[ext=m4a]/'
+            'bestvideo[filesize<?45M]+bestaudio/'
             'bestvideo[height<=720]+bestaudio/'
+            'best[filesize<?48M]/'
             'best[height<=720]/'
+            '18/'
             'best'
         )
+        ydl_opts = {
+            'format': video_format,
+            'outtmpl': output_template,
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'merge_output_format': 'mp4',
+            'max_filesize': MAX_FILE_SIZE,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'tv_downgraded', 'mweb'],
+                    'player_skip': ['web', 'configs'],
+                }
+            }
+        }
     else:
         video_format = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
-
-    ydl_opts = {
-        'format': video_format,
-        'outtmpl': output_template,
-        'quiet': True,
-        'no_warnings': True,
-        'noplaylist': True,
-        'merge_output_format': 'mp4',
-        'max_filesize': MAX_FILE_SIZE,
-        'http_headers': {
-            'User-Agent': (
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/124.0.0.0 Safari/537.36'
-            ),
+        ydl_opts = {
+            'format': video_format,
+            'outtmpl': output_template,
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'merge_output_format': 'mp4',
+            'max_filesize': MAX_FILE_SIZE,
+            'http_headers': {
+                'User-Agent': (
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/124.0.0.0 Safari/537.36'
+                ),
+            }
         }
-    }
 
     if ffmpeg_exe:
         ydl_opts['ffmpeg_location'] = ffmpeg_exe
 
-    # Agar cookies.txt fayli mavjud bo'lsa, undan foydalanish
-    cookie_file = Path("cookies.txt")
     if cookie_file.exists():
         ydl_opts['cookiefile'] = str(cookie_file)
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        if not info:
-            raise ValueError("Ma'lumot olinmadi.")
+    def _extract_and_download(opts):
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            res = ydl.extract_info(url, download=True)
+            if not res:
+                raise ValueError("Ma'lumot olinmadi.")
+            if 'entries' in res and res['entries']:
+                res = res['entries'][0]
+            filename = ydl.prepare_filename(res)
+            return res, filename
 
-        # Agar karusel yoki playlist bo'lsa birinchi elementni olish
-        if 'entries' in info and info['entries']:
-            info = info['entries'][0]
-
-        # Fayl nomini aniqlash
-        filename = ydl.prepare_filename(info)
-        base, _ = os.path.splitext(filename)
-        mp4_path = f"{base}.mp4"
-
-        if os.path.exists(mp4_path):
-            final_path = mp4_path
-        elif os.path.exists(filename):
-            final_path = filename
+    try:
+        info, filename = _extract_and_download(ydl_opts)
+    except Exception as first_err:
+        # Agar maxsus YouTube sozlamalari xatolik bersa, zaxira (fallback) bilan qayta urinish
+        if platform == "YouTube" and 'extractor_args' in ydl_opts:
+            logger.warning(f"Birlamchi YouTube mijozlari xatolik berdi ({first_err}), zaxira bilan urinilmoqda...")
+            fallback_opts = dict(ydl_opts)
+            fallback_opts.pop('extractor_args', None)
+            info, filename = _extract_and_download(fallback_opts)
         else:
-            # Agar format o'zgargan bo'lsa, yuklangan fayllarni qidirish
-            matches = list(DOWNLOAD_DIR.glob(f"{unique_id}_*"))
-            if matches:
-                final_path = str(matches[0])
-            else:
-                raise FileNotFoundError("Yuklangan video fayli topilmadi.")
+            raise first_err
 
-        title = info.get('title') or f"{platform} Video"
-        # Sarlavhani 80 ta belgi bilan chegaralash
-        if len(title) > 80:
-            title = title[:77] + "..."
+    # Fayl nomini aniqlash
+    base, _ = os.path.splitext(filename)
+    mp4_path = f"{base}.mp4"
 
-        return {
-            'filepath': final_path,
-            'title': title,
-            'duration': info.get('duration') or 0,
-            'width': info.get('width'),
-            'height': info.get('height')
-        }
+    if os.path.exists(mp4_path):
+        final_path = mp4_path
+    elif os.path.exists(filename):
+        final_path = filename
+    else:
+        matches = list(DOWNLOAD_DIR.glob(f"{unique_id}_*"))
+        if matches:
+            final_path = str(matches[0])
+        else:
+            raise FileNotFoundError("Yuklangan video fayli topilmadi.")
+
+    title = info.get('title') or f"{platform} Video"
+    if len(title) > 80:
+        title = title[:77] + "..."
+
+    return {
+        'filepath': final_path,
+        'title': title,
+        'duration': info.get('duration') or 0,
+        'width': info.get('width'),
+        'height': info.get('height')
+    }
 
 
 async def download_video(url: str, platform: str = "Video") -> dict:
@@ -514,7 +549,16 @@ async def handle_message(message: types.Message, bot: Bot):
         if "larger than" in err_msg_str or "max-filesize" in err_msg_str:
             err_text = (
                 "⚠️ Ushbu video hajmi 50MB dan katta bo'lgani sababli "
-                "Telegram orqali yuborib bo'lmaydi (Telegram botlar limiti 50MB)."
+                "Telegram orqali yuborib bo'lmaydi (Telegram botlar limiti 50MB).\n\n"
+                "💡 Maslahat: Qisqaroq video yoki YouTube Shorts havolasini yuborib ko'ring."
+            )
+        elif any(k in err_msg_str for k in ("confirm you're not a bot", "sign in to confirm", "bot", "403", "forbidden")):
+            err_text = (
+                f"⚠️ <b>{platform} tomonidan cheklov (Bot/IP himoyasi)!</b>\n\n"
+                "YouTube/Instagram bulutli server (Render/Cloud) IP-manzilidan yuklashni vaqtincha chekladi.\n\n"
+                "🔧 <b>Yechim:</b>\n"
+                "1. Botni o'z kompyuteringizda (mahalliy internetda) ishga tushiring: <code>python bot.py</code>\n"
+                "2. Yoki brauzerdan <b>cookies.txt</b> olib, Render.com da <b>YOUTUBE_COOKIES</b> o'zgaruvchisiga kiriting."
             )
         elif "timeout" in err_msg_str:
             err_text = (
@@ -523,11 +567,11 @@ async def handle_message(message: types.Message, bot: Bot):
             )
         else:
             err_text = (
-                f"❌ Kechirasiz, {platform} videosini yuklab bo'lmadi.\n"
-                "Sabablar:\n"
-                "• Video o'chirilgan yoki yopiq (private) bo'lishi mumkin\n"
-                "• Video hajmi juda katta bo'lishi mumkin\n"
-                "• Platforma tomonidan cheklov o'rnatilgan"
+                f"❌ Kechirasiz, {platform} videosini yuklab bo'lmadi.\n\n"
+                "<b>Mumkin bo'lgan sabablar:</b>\n"
+                "• Video o'chirilgan yoki yopiq (private/yopiq profil)\n"
+                "• Video hajmi juda katta (Telegram limiti 50MB)\n"
+                "• Platforma tomonidan vaqtinchalik cheklov o'rnatilgan"
             )
         await status_msg.edit_text(err_text)
     finally:

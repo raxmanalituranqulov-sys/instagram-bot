@@ -77,3 +77,33 @@ Kafolatlangan 100% uzluksiz ishlashi uchun:
 - [Cron-job.org](https://cron-job.org) yoki [UptimeRobot.com](https://uptimerobot.com) bepul saytiga kirib, shu havolaga har 5-10 daqiqada bitta GET so'rov yuborishni sozlab qo'ying.
 
 > **Muhim eslatma:** Render'da bot ishga tushgandan so'ng, o'z kompyuteringizdagi `python bot.py` ni to'xtating (yopib qo'ying). Bitta token bir vaqtning o'zida ikkita joyda ishlasa ziddiyat (Conflict) yuzaga keladi.
+
+---
+
+## ⚠️ YouTube Yuklash Cheklovi va Yechim (FAQ)
+
+Agar botda YouTube videosini yuklashda quyidagi xatolik chiqsa:
+> *«❌ Kechirasiz, YouTube videosini yuklab bo'lmadi. Platforma tomonidan cheklov o'rnatilgan»*
+
+### ❓ Sababi nima?
+1. **Render/Bulutli server IP blokirovkasi:** YouTube kompaniyasi bulutli serverlar (Render, AWS, DigitalOcean) IP-manzillaridan kelgan so'rovlarni avtomatik aniqlaydi va bot deb hisoblab bloklaydi (*«Sign in to confirm you're not a bot»* yoki *«403 Forbidden»*).
+2. **Telegram 50MB limiti:** Agar video davomiyligi uzun bo'lsa yoki 50MB dan katta bo'lsa, Telegram bot API uni yuborishga ruxsat bermaydi.
+
+### 🛠 Qanday hal qilinadi?
+
+#### 1-usul (Tavsiya etiladi - Cookies ulash):
+1. Brauzeringizga (Chrome, Edge yoki Firefox) **"Get cookies.txt LOCALLY"** kengaytmasini o'rnating.
+2. [youtube.com](https://www.youtube.com) ga kiring (o'z hisobingizga kirgan holda).
+3. Kengaytma belgisini bosing va **Export** qiling (yoki matnini nusxalang).
+4. **Render.com** boshqaruv paneliga kiring ➡️ Servisingizni oching ➡️ **Environment** bo'limiga o'ting.
+5. Yangi o'zgaruvchi qo'shing:
+   - **Key**: `YOUTUBE_COOKIES`
+   - **Value**: Ko'chirib olingan cookies matnini to'liq joylashtiring.
+6. **Save Changes** tugmasini bosing. Bot qayta ishga tushadi va YouTube endi 100% cheklovlarsiz ishlaydi!
+
+#### 2-usul (Kompyuterda mahalliy ishlatish):
+Uy internetingiz (mahalliy IP) YouTube tomonidan bloklanmaydi:
+```bash
+python bot.py
+```
+Kompyuteringizda bot barcha YouTube Shorts va videolarni to'g'ridan-to'g'ri hech qanday cheklovlarsiz yuklab beradi.
