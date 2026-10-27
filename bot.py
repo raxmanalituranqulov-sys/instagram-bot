@@ -40,10 +40,17 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-# Logging sozlamalari
+# Logging sozlamalari (faylga va konsolga yozish)
+log_handlers = [logging.StreamHandler(sys.stdout)]
+try:
+    log_handlers.append(logging.FileHandler("bot.log", encoding="utf-8"))
+except Exception:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
+    format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s",
+    handlers=log_handlers
 )
 logger = logging.getLogger(__name__)
 
@@ -885,19 +892,17 @@ async def main():
 
     print("🤖 Instagram, YouTube, Video Converter & AI Chat bot ishga tushdi...", flush=True)
 
-    # Pollingni xavfsiz boshlash (xabarlar o'chirilmasligi uchun drop_pending_updates=False)
+    # Pollingni uzluksiz boshlash (internet uzilsa yoki to'xtasa avtomatik qayta ulanadi)
     while True:
         try:
             await bot.delete_webhook(drop_pending_updates=False)
+            logger.info("Bot polling muvaffaqiyatli boshlandi...")
             await dp.start_polling(bot)
-            break
+            logger.warning("Polling to'xtatildi. 3 soniyadan keyin qayta ulanadi...")
+            await asyncio.sleep(3)
         except Exception as poll_err:
-            if "conflict" in str(poll_err).lower():
-                logger.warning("⚠️ Boshqa bot seansi faol (TelegramConflictError). 5 soniyadan so'ng qayta ulanadi...")
-                await asyncio.sleep(5)
-            else:
-                logger.error(f"Polling xatosi: {poll_err}")
-                raise poll_err
+            logger.warning(f"Polling xatosi ({poll_err}). 5 soniyadan so'ng qayta ulanadi...")
+            await asyncio.sleep(5)
 
 
 if __name__ == "__main__":
