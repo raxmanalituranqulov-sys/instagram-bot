@@ -853,14 +853,27 @@ async def main():
         print("=" * 60 + "\n", flush=True)
         return
 
-    # Render.com Web Service uchun HTTP portni ochish (har doim ishga tushiramiz)
-    try:
-        await start_health_check_server()
-    except Exception as e:
-        logger.warning(f"Health check server ishga tushirishda ogohlantirish: {e}")
+    is_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+    has_render_cookies = bool(os.getenv("YOUTUBE_COOKIES"))
 
-    # Render 15 daqiqada uxlab qolmasligi uchun 24/7 Keep-alive vazifasini ishga tushirish
-    asyncio.create_task(render_keep_alive_task())
+    # Render.com Web Service uchun sozlamalar (faqat Render serverda ishlatiladi)
+    if is_render:
+        try:
+            await start_health_check_server()
+        except Exception as e:
+            logger.warning(f"Health check server ishga tushirishda ogohlantirish: {e}")
+
+        # Render 15 daqiqada uxlab qolmasligi uchun Keep-alive vazifasi
+        asyncio.create_task(render_keep_alive_task())
+
+        if not has_render_cookies:
+            logger.info(
+                "ℹ️ Render.com muhiti aniqlandi. YouTube IP cheklovlari mavjudligi va YOUTUBE_COOKIES "
+                "berilmagani sababli Render'da Telegram polling to'xtatildi. Bot mahalliy kompyuteringiz orqali cheklovlarsiz ishlaydi."
+            )
+            print("🌐 Render HTTP Health Check rejimida faol. Polling mahalliy kompyuteringizda ishlaydi.", flush=True)
+            while True:
+                await asyncio.sleep(3600)
 
     # Katta video fayllarni yuklashda timeout xatosini oldini olish (300 soniya / 5 daqiqa)
     session = AiohttpSession(timeout=300)
@@ -870,24 +883,12 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 
-    is_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
-    has_render_cookies = bool(os.getenv("YOUTUBE_COOKIES"))
-
-    if is_render and not has_render_cookies:
-        logger.info(
-            "ℹ️ Render.com muhiti aniqlandi. YouTube IP cheklovlari mavjudligi va YOUTUBE_COOKIES "
-            "berilmagani sababli Render'da Telegram polling to'xtatildi. Bot mahalliy kompyuteringiz orqali cheklovlarsiz ishlaydi."
-        )
-        print("🌐 Render HTTP Health Check rejimida faol. Polling mahalliy kompyuteringizda ishlaydi.", flush=True)
-        while True:
-            await asyncio.sleep(3600)
-
     print("🤖 Instagram, YouTube, Video Converter & AI Chat bot ishga tushdi...", flush=True)
 
-    # Eskirgan buyruqlarni tozalash va pollingni xavfsiz boshlash
+    # Pollingni xavfsiz boshlash (xabarlar o'chirilmasligi uchun drop_pending_updates=False)
     while True:
         try:
-            await bot.delete_webhook(drop_pending_updates=True)
+            await bot.delete_webhook(drop_pending_updates=False)
             await dp.start_polling(bot)
             break
         except Exception as poll_err:
